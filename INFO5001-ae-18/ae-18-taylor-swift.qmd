@@ -1,0 +1,358 @@
+---
+title: "Sentiment analysis of song lyrics (Taylor's Version)"
+author: "Christina Feng (cef 229)"
+format: html
+---
+
+```{r}
+#| label: packages
+#| message: false
+#| cache: false
+
+library(tidyverse)
+library(tidytext)
+library(taylor)
+library(tayloRswift)
+library(textdata)
+library(scales)
+
+theme_set(theme_minimal())
+```
+
+**Taylor Swift** is one of the most recognizable and popular recording artists on the planet. She is also a prolific songwriter, having written or co-written every song on each of her eleven studio albums. Currently she is smashing records on her Eras concert tour.
+
+![](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZTM1Y3BndHp5emhxeWJlbnk5NzZibW44bTVvdzlwa2d4NW51Nzk0dyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/xT0Cyhi8GCSU91PvtC/giphy.gif){fig-alt="Taylor Swift holding her hands up in a heart shape and then pointing at the camera."}
+
+Taylor Swift's music is known for its emotional depth and relatability. Her lyrics often touch on themes of love, heartbreak, and personal growth, and her music has shifted substantially over the years through different genres and styles.
+
+In this application exercise we will use the [**taylor**](https://taylor.wjakethompson.com/) package to analyze the lyrics of Taylor Swift's songs and attempt to answer the question: **has Taylor Swift gotten angrier over time?**
+
+The package contains a data frame `taylor_albums` with information about each of her studio albums, including the release date, the number of tracks, and the album cover art. The package also contains a data frame `taylor_album_songs` with the lyrics of each song from her official studio albums.^[This excludes singles released separately from an album as well as non-Taylor-owned albums that have a Taylor-owned alternative (e.g., *Fearless* is excluded in favor of *Fearless (Taylor’s Version))*.]
+
+# Import Taylor Swift lyrics
+
+We can load the relevant data files directly from the **taylor** package.
+
+::: callout-note
+
+While we can stan artists owning their own master recordings, since our analysis is going to be on Taylor Swift's chronological arc we need to focus purely on the original studio recordings.
+
+:::
+
+```{r}
+#| label: taylor
+
+library(taylor)
+
+data("taylor_album_songs")
+data("taylor_albums")
+
+# examine original studio release albums only
+taylor_album_songs_orig <- taylor_all_songs |>
+  select(album_name, track_number, track_name, lyrics) |>
+  # filter to full studio albums
+  semi_join(y = taylor_albums |>
+    filter(!ep)) |>
+  # exclude rereleases
+  filter(!str_detect(string = album_name, pattern = "Taylor's Version")) |>
+  # order albums by release date
+  mutate(album_name = factor(x = album_name, levels = taylor_albums$album_name))
+taylor_album_songs_orig
+```
+
+# Convert to **tidytext** format
+
+Currently, `taylor_album_songs_orig` is stored as one-row-song, with the lyrics nested in a **list-column** where each element is a tibble with one-row-per-line. The definition of a single "line" is somewhat arbitrary. For substantial analysis, we will convert the corpus to a tidy-text data frame of one-row-per-token.
+
+**Your turn:** Use `unnest_tokens()` to tokenize the text into words (unigrams).
+
+::: callout-note
+
+Remember that by default, `unnest_tokens()` automatically converts all text to lowercase and strips out punctuation.
+
+:::
+
+```{r}
+#| label: tidy
+
+# tokenize taylor lyrics
+taylor_lyrics <- taylor_album_songs_orig |>
+  # select relevant columns
+  select(album_name, track_number, track_name, lyrics) |>
+  # unnest the list-column to one-row-per-song-per-line
+  unnest(col = lyrics) |>
+  # now tokenize the lyrics
+  unnest_tokens(output = word, input = lyric)
+taylor_lyrics
+```
+
+# Initial review and exploration
+
+## Length of songs by words
+
+**Demo:** An initial check reveals the length of each song in terms of the number of words in its lyrics.
+
+```{r}
+#| label: song-length
+
+taylor_lyrics |>
+  count(album_name, track_number, track_name) |>
+  ggplot(mapping = aes(x = n)) +
+  geom_histogram() +
+  labs(
+    title = "Length of songs by Taylor Swift",
+    x = "Song length (in words)",
+    y = NULL,
+    caption = "Source: {taylor}"
+  )
+```
+
+## Stop words
+
+### Generic stop words
+
+Of course not all words are equally important. Consider the 10 most frequent words in the lyrics:
+
+```{r}
+#| label: stopwords
+
+taylor_lyrics |>
+  count(word, sort = TRUE)
+```
+
+These are not particularly informative.
+
+**Your turn:** Remove stop words from the tokenized lyrics. Use the SMART stop words list.
+
+```{r}
+#| labe: stop-remove
+
+# get a set of stop words
+get_stopwords(source = "smart")
+
+# remove stop words
+taylor_tidy <- anti_join(x = taylor_lyrics,
+                         y = get_stopwords(source = "smart"))
+taylor_tidy
+
+# what are the most common words now?
+taylor_tidy |>
+  count(word) |>
+  slice_max(n = 20, order_by = n) |>
+  mutate(word = fct_reorder(.f = word, .x = n)) |>
+  ggplot(aes(x = n, y = word)) +
+  geom_col() +
+  labs(
+    title = "Frequency of tokens in Taylor Swift lyrics",
+    x = "Number of occurrences",
+    y = NULL,
+    caption = "Source: {taylor}"
+  )
+```
+
+### Domain-specific stop words
+
+While this takes care of generic stop words, we can also identify domain-specific stop words. For example, Taylor Swift's lyrics are full of interjections and exclamations that are not particularly informative. We can identify these and remove them from the corpus.
+
+**Your turn:** Use the custom set of domain-specific stop words and remove them from the tokens data frame.
+
+```{r}
+#| label: domain-stop-words
+
+# domain-specific stop words
+# source: https://rpubs.com/RosieB/642806
+taylor_stop_words <- c(
+  "oh", "ooh", "eh", "ha", "mmm", "mm", "yeah", "ah",
+  "hey", "eeh", "uuh", "uh", "la", "da", "di", "ra",
+  "huh", "hu", "whoa", "gonna", "wanna", "gotta", "em"
+)
+
+taylor_tidy <- taylor_lyrics |>
+  anti_join(y = get_stopwords(source = "smart")) |>
+  filter(!word %in% taylor_stop_words)
+taylor_tidy
+
+taylor_tidy |>
+  count(word, sort = TRUE)
+```
+
+# How do we measure anger? Implementing dictionary-based sentiment analysis
+
+**Sentiment analysis** utilizes the text of the lyrics to classify content as positive or negative. Dictionary-based methods use pre-generated lexicons of words independently coded as positive/negative. We can combine one of these dictionaries with the Taylor Swift tidy-text data frame using `inner_join()` to identify words with sentimental affect, and further analyze trends.
+
+**Your turn:** Use the `afinn` dictionary which classifies words on a scale of $[-5, +5]$. Join the sentiment dictionary with the tokenized lyrics and only retain words that are defined in the dictionary.
+
+```{r}
+#| label: sentiment
+#| dependson: stop-remove
+
+# afinn dictionary
+get_sentiments(lexicon = "afinn")
+
+# how many words for each value?
+get_sentiments(lexicon = "afinn") |>
+  count(value)
+
+# join with sentiment dictionary, drop words which are not defined
+taylor_afinn <- taylor_tidy |>
+  inner_join(y = get_sentiments(lexicon = "afinn"))
+taylor_afinn
+```
+
+## Sentimental affect of each song
+
+**Your turn:** Examine the sentiment of each song individually by calculating the average sentiment of each word in the song. What are the top-5 most positive and negative songs?
+
+```{r}
+#| label: sentiment-song
+#| fig-asp: 4.5
+
+taylor_afinn_sum <- taylor_afinn |>
+  summarize(sent = mean(value), .by = c(album_name, track_name))
+
+slice_max(.data = taylor_afinn_sum, n = 5, order_by = sent)
+slice_min(.data = taylor_afinn_sum, n = 5, order_by = sent)
+```
+
+### *Shake It Off*
+
+![Taylor Swift shaking it off](https://media.giphy.com/media/yITRaXaeigt2M/giphy.gif){fig-alt="Taylor Swift singing 'Haters gonna hate'"}
+
+**Your turn:** What are the most positive and negative words in "Shake It Off"? Do these seem reflective of the song's overall sentiment?
+
+```{r}
+#| label: sentiment-outliers
+
+# what's up with shake it off?
+taylor_afinn |>
+  filter(track_name == "Shake It Off") |>
+  count(word, value) |>
+  arrange(-value)
+```
+
+*Add response here.*
+
+## Sentimental affect of each album
+
+**Your turn:** Calculate the average sentimental affect for each album, and examine the general disposition of each album based on their overall positive/negative affect. Report on any trends you observe.
+
+```{r}
+#| label: sentiment-by-album
+
+# errorbar plot
+taylor_afinn |>
+  # calculate average sentiment by album with standard error
+  summarize(
+    sent = mean(value),
+    se = sd(value) / sqrt(n()),
+    .by = album_name
+  ) |>
+  # reverse album order for vertical plot
+  mutate(album_name = fct_rev(f = album_name)) |>
+  # generate plot
+  ggplot(mapping = aes(y = album_name, x = sent)) +
+  geom_pointrange(mapping = aes(
+    xmin = sent - 2 * se,
+    xmax = sent + 2 * se
+  )) +
+  labs(
+    title = "Emotional affect in Taylor Swift albums",
+    x = "Average sentiment",
+    y = NULL,
+    caption = "Source: {taylor}"
+  )
+```
+
+*Add response here.*
+
+## Varying types of sentiment
+
+**Your turn:** **tidytext** and [**textdata**](https://emilhvitfeldt.github.io/textdata/index.html) include multiple sentiment dictionaries for different types of sentiment. Use the NRC Affect Intensity Lexicon to score each of Taylor Swift's songs based on four basic emotions (anger, fear, sadness, and joy), then calculate the sum total for each type of affect by album, standardized by the number of affective words in each album.
+
+::: callout-tip
+Use `lexicon_nrc_eil()` from **textdata** to download the sentiment dictionary.
+:::
+
+```{r}
+#| label: sentiment-nrc
+
+nrc_lexicon <- lexicon_nrc_eil() |> 
+  rename(word = term)
+
+taylor_tidy |>
+  # join with sentiment dictionary
+  inner_join(nrc_lexicon, by = "word") |>
+  # calculate cumulative affect for each album and dimension
+  summarize(
+    score = sum(score),
+    n = n(),
+    .by = c(album_name, AffectDimension)
+  ) |>
+  # determine the total number of affective terms per album and standardize
+  mutate(n = sum(n), .by = album_name) |>
+  mutate(
+    score_norm = score / n,
+    album_name = fct_rev(album_name)
+  ) |>
+  # visualize using a bar plot
+  ggplot(mapping = aes(x = score_norm, y = album_name)) +
+  geom_col() +
+  facet_wrap(
+    facets = vars(AffectDimension)
+  ) +
+  labs(
+    title = "Sentimental affect (by type) in Taylor Swift albums",
+    subtitle = "Original studio albums",
+    x = "Affect intensity (normalized per token)",
+    y = NULL,
+    caption = "Source: {taylor}"
+  )
+```
+
+*Add response here.*
+
+## Fuck it, let's build a dictionary ourselves
+
+What if we operationalize "anger" purely on the frequency of cursing in Taylor Swift's songs? We can generate our own custom curse word dictionary^[Courtesy of [stephsmithio on r/dataisbeautiful](https://www.reddit.com/r/dataisbeautiful/comments/1c9qp4k/swear_words_in_taylor_swift_albums_oc/)] and examine the relative usage of these words across Taylor Swift's albums.
+
+**Your turn:** Use the curse word dictionary to calculate how often Taylor Swift curses across her studio albums. Identify any relevant trends.
+
+```{r}
+#| label: taylor-cursing
+
+# curse word dictionary
+taylor_curses <- c(
+  "whore", "damn", "goddamn", "hell",
+  "bitch", "shit", "fuck", "dickhead"
+)
+
+taylor_tidy |>
+  # only keep words that appear in curse word dictionary
+  filter(word %in% taylor_curses) |>
+  # format columns for plotting
+  mutate(
+    word = fct_infreq(f = word),
+    album_name = str_wrap(album_name, 20) |>
+      fct_inorder() |>
+      fct_rev()
+  ) |>
+  # horizontal bar chart
+  ggplot(mapping = aes(y = album_name, fill = word)) +
+  geom_bar(color = "white") +
+  # use a Taylor Swift color palette
+  scale_fill_taylor_d(album = "1989", guide = guide_legend(nrow = 1, rev = TRUE)) +
+  labs(
+    title = "Swear words in Taylor Swift albums",
+    x = "Frequency count",
+    y = NULL,
+    fill = NULL,
+    caption = "Source: {taylor}"
+  ) +
+  # format legend to not get cut off on the side
+  theme(
+    legend.position = "top",
+    legend.text.position = "bottom"
+  )
+```
+
+*Add response here.*

@@ -1,0 +1,160 @@
+---
+title: "AE 12: Rectangling data from the PokéAPI"
+author: "Christina Feng (cef229)"
+format: html
+knitr:
+  opts_chunk: 
+    dev: "ragg_png"
+---
+
+# Packages
+
+We will use the following packages in this application exercise.
+
+-   **tidyverse**: For data import, wrangling, and visualization.
+-   **jsonlite**: For importing JSON files
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+library(jsonlite)
+```
+
+# Gotta catch em' all!
+
+**Pokémon** (also known as **Pocket Monsters**) is a Japanese media franchise consisting of video games, animated series and films, a trading card game, and other related media.[^1] The [PokéAPI](https://pokeapi.co/) contains detailed information about each Pokémon, including their name, type, and abilities. In this application exercise, we will use a set of JSON files containing API results from the PokéAPI to explore the Pokémon universe.
+
+[^1]: Source: [Wikipedia](https://en.wikipedia.org/wiki/Pok%C3%A9mon)
+
+# Importing the data
+
+`data/pokedex.json` and `data/types.json` contain information about each Pokémon and the different types of Pokémon, respectively. We will use `read_json()` to import these files.
+
+```{r}
+#| label: import-data
+
+pokemon <- read_json(path = "data/pokemon/pokedex.json")
+types <- read_json(path = "data/pokemon/types.json")
+```
+
+**Your turn:** Use `View()` to interactively explore each list object to identify their structure and the elements contained within each object.
+
+# Unnesting for analysis
+
+For each of the exercises below, use an appropriate rectangling procedure to `unnest_*()` one or more lists to extract the required elements for analysis.
+
+## How many Pokémon are there for each primary type?
+
+**Your turn:** Use each Pokemon's **primary type** (the first one listed in the data) to determine how many Pokémon there are for each type, then create a bar chart to visualize the distribution. The chart should label each Pokémon type in both English and Japanese.
+
+::: callout-tip
+Examine the contents of each list object to determine how the relevant variables are structured so you can plan your approach.
+
+There are (at least) three ways you could approach this problem.
+
+1.  Use `unnest_wider()` twice to extract the primary type from the pokemon list and generate a frequency count.
+2.  Use `unnest_wider()` and `hoist()` to extract the primary type from the pokemon list and generate a frequency count.
+3.  Use `unnest_wider()` and `unnest_longer()` to extract the primary type from the pokemon list and generate a frequency count.
+
+Pick one and have at it!
+:::
+
+::: callout-note
+Fancy a challenge? Label each Pokémon type in both **English** and **Japanese**.
+:::
+
+```{r}
+#| label: pokemon-by-type
+
+# add code here
+
+tibble(pokemon) |>
+  unnest_wider(col = pokemon) |>
+  unnest_wider(col = type, names_sep = "_") |>
+  count(type_1)
+
+counting <- tibble(pokemon) |>
+  unnest_wider(col = pokemon) |>
+  unnest_longer(col = type) |>
+  slice_head(n = 1, by = id) |> #can use groupby or by within slide_head
+  count(type)
+
+names <- tibble(types) |>
+  unnest_wider(col = types) |>
+  select(english, japanese) |>
+  mutate(combined_label = paste(english, japanese, sep = "/"))
+
+counting <- counting |>
+  left_join(names, by = c("type" = "english"))
+
+ggplot(counting, aes(x = reorder(combined_label, n), 
+                     y = n,
+                     fill = n)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_fill_gradient(low = "darkorange2", high = "deepskyblue2") +
+  labs(
+    title = "Pokemon Count by Primary Type",
+    x = "Primary Pokemon Type",
+    y = "Count"
+  ) +
+  coord_flip() +
+  theme_minimal()
+```
+
+## Which primary type of Pokémon are strongest based on total number of points?
+
+**Your turn:** Use each Pokémon's base stats to determine which primary type of Pokémon are strongest based on the total number of points. Create a boxplot to visualize the distribution of total points for each primary type.
+
+::: callout-tip
+To calculate the sum total of points for each Pokémon's base stats, there are two approaches you might consider. In either approach you first need to get each Pokémon's variables into separate columns and extract the primary type.
+
+1.  Use `unnest_wider()` to extract the base stats, then calculate the sum of the base stats.
+2.  Use `unnest_longer()` to extract the base stats, then calculate the sum of the base stats.
+:::
+
+```{r}
+#| label: pokemon-by-total-points
+
+# add code here
+
+primary_types <- tibble(pokemon) |>
+  unnest_wider(col = pokemon) |>
+  unnest_longer(col = type) |>
+  slice_head(n = 1, by = id) |>
+  count(type)
+
+base_stats <- tibble(pokemon) |>
+  unnest_wider(col = pokemon) |>
+  unnest_longer(col = type) |>
+  slice_head(n = 1, by = id) |>
+  unnest_wider(col = base, names_sep = "_") |>
+  mutate(total_points = rowSums(across(starts_with("base_")), na.rm = TRUE)) |>
+  select(id, name, type, total_points)
+
+final_data <- left_join(base_stats, primary_types, by = "type")
+
+median_data <- final_data |>
+  group_by(type) |>
+  summarise(median = median(total_points, na.rm = TRUE))
+
+final_data <- left_join(final_data, median_data, by = "type")
+
+ggplot(final_data, aes(x = reorder(type, median), 
+                       y = total_points, 
+                       fill = median)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_gradient(low = "darkorange2", high = "deepskyblue2") + 
+  labs(
+    title = "Strength of Pokémon Primary Types Based on Base Stats",
+    x = "Primary Type",
+    y = "Total Points"
+  ) +
+  theme_minimal() +
+  coord_flip() 
+```
+
+# Acknowledgments
+
+-   JSON data files obtained from [`Purukitto/pokemon-data.json`](https://github.com/Purukitto/pokemon-data.json)

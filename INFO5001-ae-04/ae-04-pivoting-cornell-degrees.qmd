@@ -1,0 +1,321 @@
+---
+title: "AE 04: Pivoting Cornell Degrees"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+::: callout-important
+Go to the [course GitHub organization](https://github.coecis.cornell.edu/info5001-fa24) and locate the repo titled `ae-05-YOUR_GITHUB_USERNAME` to get started.
+
+This AE is due September 17 at 11:59pm.
+:::
+
+# Goal
+
+Our ultimate goal in this application exercise is to make the following data visualization.
+
+![](images/cornell-degree-plot-final.png){fig-alt="Line plot of numbers of Cornell degrees awarded in six fields of study from 2001 to 2022." fig-align="center"}
+
+-   **Your turn (3 minutes):** Take a close look at the plot and describe what it shows in 2-3 sentences.
+
+Based on the top six fields in 2022, the plot displays how computer-related degrees quickly outranked the relatively declining other five fields over the past decade. From 2002 to 2004, all of the fields except business marketing experienced a significant increase or drop due to maybe a program classification change, student interest shift, or global revolution.
+
+# Data
+
+The data come from the [Department of Education's College Scorecard](https://collegescorecard.ed.gov/).
+
+They make the data available through online dashboards and an API, but I've prepared the data for you in a CSV file. Let's load that in.
+
+```{r}
+#| label: load-packages-data
+#| message: false
+
+library(tidyverse)
+library(scales)
+
+cornell_deg <- read_csv("data/cornell-degrees.csv")
+```
+
+And let's take a look at the data.
+
+```{r}
+#| label: view-data
+
+cornell_deg
+```
+
+The dataset has `r nrow(cornell_deg)` rows and `r ncol(cornell_deg)` columns. The first column (variable) is the `field_of_study`, which are the 6 most frequent fields of study for students graduating in 2022.[^1] The remaining columns show the proportion of degrees awarded in each year from 2001-2022.
+
+[^1]: For the sake of application, I omitted the other 32 possible fields of study.
+
+-   **Your turn (4 minutes):** Take a look at the plot we aim to make and sketch the data frame we need to make the plot. Determine what each row and each column of the data frame should be. *Hint:* We need data to be in columns to map to `aes`thetic elements of the plot.
+    -   Columns: Variables like the percent of degrees awards, year, field of study
+
+    -   Rows: The observation of the variables like 0.08, 2001, and computer
+
+# Pivoting
+
+-   **Demo:** Pivot the `cornell_deg` data frame *longer* such that each row represents a field of study / year combination and `year` and `pct`age of graduates for that year are columns in the data frame.
+
+```{r}
+#| label: pivot-longer
+
+# add your code here
+
+#column name we want to collect
+cornell_deg |>
+  pivot_longer(
+    cols = `2001`:`2022`,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  )
+
+#column name we don't want to collect
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct"
+  )
+```
+
+-   **Question:** What is the type of the `year` variable? Why? What should it be?
+
+    The year variable was a character variable because it does not look at the observation and automatically make it a character variable based on its name beginning with a charcter. It should be a dbl variable, which is a numeric type.
+
+-   **Demo:** Start over with pivoting, and this time also make sure `year` is a numerical variable in the resulting data frame.
+
+```{r}
+#| label: pivot-longer-num
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+
+ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line()
+```
+
+# Plotting
+
+-   **Your turn (5 minutes):** Now we start making our plot, but let's not get too fancy right away. Create the following plot, which will serve as the "first draft" on the way to our [Goal]. Do this by adding on to your pipeline from earlier.
+
+![](images/cornell-degree-plot-draft.png){fig-alt="Line plot of numbers of Cornell degrees awarded in six fields of study from 2001 to 2022." fig-align="center"}
+
+```{r}
+#| label: plot-draft
+
+# add your code here
+
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+
+ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line()
+```
+
+-   **Your turn (4 minutes):** What aspects of the plot need to be updated to go from the draft you created above to the [Goal] plot at the beginning of this application exercise.
+
+    -   The y axis has to be a percentage instead of decimal.
+
+    -   The x axis intervals has to be 4 years instead of five.
+
+    -   The color palette.
+
+    -   Informative labels for the title, x-axis, y-axis, and legend.
+
+-   **Demo:** Update x-axis scale such that the years displayed go from 2000 to 2020 in increments of 4 years. Update y-axis scale so it uses percentage formatting. Do this by adding on to your pipeline from earlier.
+
+```{r}
+#| label: scales
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+
+ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  scale_x_continuous(breaks = seq(from = 2000,
+                                  to = 2022,
+                                  by = 4))
+```
+
+-   **Demo:** Update the order of the values in the legend so they match the order of the lines in the plot. Do this by adding on to your pipeline from earlier.
+
+```{r}
+#| label: legend-order
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+  mutate(field_of_study = fct_relevel(
+    .f = field_of_study,
+    "Computer", "Business Marketing", 
+    "Engineering", "Biological", 
+    "Agriculture", "Social Science"
+  )) |>
+  ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  scale_x_continuous(breaks = seq(from = 2000,
+                                  to = 2022,
+                                  by = 4))
+```
+
+-   **Demo:** Update line colors using the `scale_color_colorblind()` palette from **ggthemes**. Once again, do this by adding on to your pipeline from earlier.
+
+```{r}
+#| label: color-palette
+
+library(ggthemes)
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+  mutate(field_of_study = fct_relevel(
+    .f = field_of_study,
+    "Computer", "Business Marketing", 
+    "Engineering", "Biological", 
+    "Agriculture", "Social Science"
+  )) |>
+  ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  scale_x_continuous(breaks = seq(from = 2000,
+                                  to = 2022,
+                                  by = 4)) +
+  scale_color_colorblind()
+```
+
+-   **Your turn (4 minutes):** Update the plot labels (`title`, `subtitle`, `x`, `y`, and `caption`) and use `theme_minimal()`. Once again, do this by adding on to your pipeline from earlier.
+
+```{r}
+#| label: plot-labels
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+  mutate(field_of_study = fct_relevel(
+    .f = field_of_study,
+    "Computer", "Business Marketing", 
+    "Engineering", "Biological", 
+    "Agriculture", "Social Science"
+  )) |>
+  ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  scale_x_continuous(breaks = seq(from = 2000,
+                                  to = 2022,
+                                  by = 4)) +
+  scale_color_colorblind() + 
+  labs(title = "Cornell University degrees awarded from 2001-2022",
+      subtitle = "Only the top six fields as of 2022",
+      x = "Graduation year", 
+      y = "Percent of degrees awarded",
+      caption = "Source: Department of 
+      Education\nhttps://collegescorecard.ed.gov/",
+      color = "Field of Study") +
+  theme_minimal()
+```
+
+-   **Demo:** Finally, set `fig-width: 7` and `fig-height: 5` for your plot in the chunk options.
+
+```{r}
+#| label: plot-final
+#| fig-width: 7
+#| fig-height: 5
+
+# add your code here
+cornell_deg |>
+  pivot_longer(
+    cols = -field_of_study,
+    names_to = "year",
+    values_to = "pct",
+    names_transform = parse_number
+  ) |>
+  mutate(field_of_study = fct_relevel(
+    .f = field_of_study,
+    "Computer", "Business Marketing", 
+    "Engineering", "Biological", 
+    "Agriculture", "Social Science"
+  )) |>
+  ggplot(mapping = aes(
+       x = year,
+       y = pct,
+       color = field_of_study)) + 
+  geom_point() + 
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  scale_x_continuous(breaks = seq(from = 2000,
+                                  to = 2022,
+                                  by = 4)) +
+  scale_color_colorblind() + 
+  labs(title = "Cornell University degrees awarded from 2001-2022",
+      subtitle = "Only the top six fields as of 2022",
+      x = "Graduation year", 
+      y = "Percent of degrees awarded",
+      caption = "Source: Department of 
+      Education\nhttps://collegescorecard.ed.gov/",
+      color = "Field of Study") +
+  theme_minimal()
+```
+
+# Acknowledgments
+
+-   This assignment is inspired by [STA 199: Introduction to Data Science](https://sta199-f22-1.github.io/)

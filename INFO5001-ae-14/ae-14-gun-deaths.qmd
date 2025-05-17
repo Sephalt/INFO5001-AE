@@ -1,0 +1,67 @@
+---
+title: "Gun deaths"
+author: "Your name"Christina Feng (cef229)
+date: today
+format: 
+  html
+    toc: true
+    toc-depth:2
+    toc-location: left
+    theme:
+      light: flatly
+      dark: darkly
+execute:
+  echo: false
+  cashe: true
+
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(rcis)
+
+data("gun_deaths")
+```
+
+```{r}
+#| label: youth
+
+youth <- gun_deaths |>
+  filter(age <= 65)
+```
+
+# Gun deaths by age
+
+We have data about `r nrow(gun_deaths)` individuals killed by guns. Only `r nrow(gun_deaths) - nrow(youth)` are older than 65. The distribution of the remainder is shown below:
+
+```{r}
+#| label: youth-dist
+#| echo: false
+#| fig-width: 8
+#| fig- height: 6
+#| cashe: true
+
+ggplot(data = youth, mapping = aes(x = age)) + 
+  geom_freqpoly(binwidth = 1)
+```
+This distribution reveals a significant peak in gun deaths at around 20 years of age. This relative peak slowly declines until a small relative peak around 40 years of age. And then the distribution decreases past 50 years old.
+
+# Gun deaths by race
+
+```{r}
+#| label: race-dist
+#| echo: false
+#| fig-width: 8
+#| fig-height: 6
+#| cache: true
+
+
+youth |>
+  mutate(race = fct_infreq(race) |> fct_rev()) |>
+  ggplot(mapping = aes(y = race)) +
+  geom_bar() +
+  labs(y = "Victim race")
+```

@@ -1,0 +1,104 @@
+---
+title: "Building better training data to predict children in hotel bookings"
+author: Your name
+format: html
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(tidymodels)
+library(themis)
+
+# import hotels data
+hotels <- read_csv("data/hotels.csv") |>
+  mutate(across(where(is.character), as.factor))
+
+# data splitting
+set.seed(100) # Important!
+hotels_split  <- initial_split(hotels, strata = children, prop = .9)
+hotels_train  <- training(hotels_split)
+hotels_test   <- testing(hotels_split)
+
+# data resampling
+set.seed(100)
+hotels_folds <- vfold_cv(hotels_train, v = 10, strata = children)
+
+# KNN model
+knn_mod <- nearest_neighbor() |>              
+  set_engine("kknn") |>             
+  set_mode("classification")
+
+holidays <- c("AllSouls", "AshWednesday", "ChristmasEve", "Easter", 
+              "ChristmasDay", "GoodFriday", "NewYearsDay", "PalmSunday")
+```
+
+# Your Turn 1
+
+Unscramble!
+You have all the steps from our `knn_rec`- your challenge is to *unscramble* them into the right order!
+
+Save the result as `knn_rec`
+
+```{r}
+step_normalize(all_numeric())
+
+recipe(children ~ ., data = hotels)
+
+step_rm(arrival_date)
+
+step_date(arrival_date)
+
+step_downsample(children)
+
+step_holiday(arrival_date, holidays = holidays)
+
+step_dummy(all_nominal_predictors())
+
+step_zv(all_predictors())
+```
+
+# Your Turn 2
+
+Fill in the blanks to make a workflow that combines `knn_rec` and with `knn_mod`.
+
+```{r}
+knn_wf <- ______ |> 
+  ______(knn_rec) |> 
+  ______(knn_mod)
+knn_wf
+```
+
+# Your Turn 3
+
+Edit the code chunk below to fit the entire `knn_wflow` instead of just `knn_mod`.
+
+```{r}
+set.seed(100)
+knn_mod |> 
+  fit_resamples(children ~ ., 
+                resamples = hotels_folds,
+                # print progress of model fitting
+                control = control_resamples(verbose = TRUE)) |> 
+  collect_metrics()
+```
+
+# Your Turn 4
+
+Turns out, the same `knn_rec` recipe can also be used to fit a penalized logistic regression model using the lasso.
+Let's try it out!
+
+```{r}
+plr_mod <- logistic_reg(penalty = .01, mixture = 1) |> 
+  set_engine("glmnet") |> 
+  set_mode("classification")
+
+plr_mod |> 
+  translate()
+```
+
+# Acknowledgments
+
+- Materials derived from [Tidymodels, Virtually: An Introduction to Machine Learning with Tidymodels](https://tmv.netlify.app/site/) by [Allison Hill](https://www.apreshill.com/).
+- Dataset and some modeling steps derived from [A predictive modeling case study](https://www.tidymodels.org/start/case-study/) and licensed under a [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA) License](https://creativecommons.org/licenses/by/4.0/).

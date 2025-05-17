@@ -1,0 +1,115 @@
+---
+title: "AE 06: Data types and classes"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+# Packages
+
+We will use the following packages in this application exercise.
+
+-   **tidyverse**: For data import, wrangling, and visualization.
+-   **skimr**: For summarizing the entire data frame at once.
+-   **scales**: For better axis labels.
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+library(skimr)
+library(scales)
+```
+
+# Hotel bookings
+
+[Antonio, Almeida, and Nunes (2019)](https://doi.org/10.1016/j.dib.2018.11.126) collected detailed information on hotel bookings from two hotels (one resort hotel and one city hotel) in Portugal. The data set contains information such as when the booking was made, length of stay, number of adults, number of children, and number of available parking spaces.
+
+## Load the data
+
+The data is stored in `data/hotels-tt.csv`. Let's load the data file and examine it's contents. Since the dataset is substantially large (nearly 30 variables and over 100,000 observations), we'll use `skimr::skim()` to provide a compact summary of the data.
+
+```{r}
+#| label: load-data
+#| message: false
+
+hotels <- read_csv("data/hotels-tt.csv")
+skim(hotels) # much more useful to run interactively in the console
+```
+
+## How does the Average Daily Rate (ADR) change over time? Are there differences between the city and resort hotel?
+
+**Your turn:** Create a visualization that shows the average daily rate (ADR) over time for the city and resort hotels. Calculate the average (mean) ADR for each hotel by month based on when the guest(s) are scheduled to arrive, then visualize using a line graph. Ensure the $x$-axis is ordered chronologically.
+
+::: callout-note
+Use the **lubridate** package to restructure the data and determine the month when each stay began.
+:::
+
+```{r}
+#| label: hotels-adr-by-month
+
+# add your code here
+
+hotels |>
+  select(hotel, arrival_date, adr) |>
+  mutate(arrival_date = mdy(arrival_date),
+         arrival_month = month(arrival_date, label = TRUE)) |>
+  group_by(hotel, arrival_month) |>
+  summarize(mean_adr = (mean(adr))) |>
+  ggplot(
+    mapping = aes(x = arrival_month,
+                  y = mean_adr,
+                  color = hotel,
+                  group = hotel)
+  ) +
+  labs(title = "Average Daily Rate Over Time",
+      subtitle = "Based on Hotel Type",
+      x = "Month",
+      y = "Average Daily Rate",
+      color = "Hotel") +
+  geom_line()
+
+
+```
+
+## How often is each meal package booked?
+
+**Your turn:** `meal` reports the type of meal booked with the hotel stay. Categories are presented in standard hospitality meal packages:
+
+-   `Undefined`/`SC` – no meal package
+-   `BB` – Bed & Breakfast
+-   `HB` – Half board (breakfast and one other meal – usually dinner)
+-   `FB` – Full board (breakfast, lunch and dinner)
+
+Create a bar chart reporting the total number of bookings for each meal package. Order the bars by frequency (i.e. most frequent meal package on the left, least frequent meal package on the right).
+
+::: callout-note
+**forcats** will be your friend in preparing the data for the visualization.
+:::
+
+```{r}
+#| label: meals
+
+# add your code here
+
+total_meals <- hotels |>
+  mutate(
+    meal = fct_recode(.f = meal,
+                      `No Meal Package` = "Undefined",
+                      `No Meal Package` = "SC",
+                      `Bed & Breakfast` = "BB",
+                      `Half Board` = "HB",
+                      `Full Board` = "FB")
+  ) |>
+  count(meal)
+
+
+ggplot(total_meals, aes(x = fct_reorder(meal, n, .desc = TRUE), 
+                        y = n,
+                        fill = meal)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  labs(title = "Meal Package Bookings",
+       x = "Meal Package",
+       y = "Number of Bookings") +
+  theme_minimal()
+```

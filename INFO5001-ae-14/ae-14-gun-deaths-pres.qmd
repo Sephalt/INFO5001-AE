@@ -1,0 +1,85 @@
+---
+title: "Gun deaths"
+author: Your name
+date: today
+format: revealjs
+execute:
+  echo: false
+  cache: true
+---
+
+```{r}
+#| label: setup
+#| include: false
+#| cache: false
+
+library(tidyverse)
+library(rcis)
+library(scales) # formatting numbers
+
+data("gun_deaths")
+
+theme_set(theme_minimal(base_size = 16))
+```
+
+```{r}
+#| label: youth
+
+youth <- gun_deaths |>
+  filter(age <= 65)
+```
+
+## Gun deaths by age
+
+:::: columns
+
+::: {.column width="50%"}
+
+```{r}
+#| label: youth-dist
+#| fig-width: 5
+
+ggplot(data = youth, mapping = aes(x = age)) + 
+  geom_freqpoly(binwidth = 1) +
+  labs(
+    title = "Most victims of gun violence in\nthe United States are youths",
+    subtitle = "2012-2014",
+    x = "Age of victim",
+    y = "Frequency count",
+    caption = "Source: FiveThirtyEight"
+  )
+```
+
+:::
+
+::: {.column width="50%"}
+
+::: incremental
+
+- `r label_comma()(nrow(gun_deaths))` individuals killed by guns
+- `r label_comma()(nrow(gun_deaths) - nrow(youth))` are older than 65
+
+:::
+
+:::
+
+::::
+
+## Gun deaths by race
+
+```{r}
+#| label: race-dist
+
+youth |>
+  mutate(race = fct_infreq(race) |> fct_rev()) |>
+  ggplot(mapping = aes(y = race)) +
+  geom_bar() +
+  scale_x_continuous(labels = label_comma()) +
+  labs(
+    title = "Most victims of gun violence in\nthe United States are white",
+    subtitle = "2012-2014",
+    y = "Race of victim",
+    x = "Number of victims",
+    caption = "Source: FiveThirtyEight"
+  )
+```

@@ -1,0 +1,296 @@
+---
+title: "AE 01: Visualizing the prognosticators"
+author: Christina Feng
+format: html
+editor: 
+  markdown: 
+    wrap: sentence
+---
+
+::: callout-important
+Go to the [course GitHub organization](https://github.coecis.cornell.edu/info5001-fa24) and locate the repo titled `ae-01-YOUR_GITHUB_USERNAME` to get started.
+
+This AE is due September 5 at 11:59pm.
+:::
+
+For all analyses, we'll use the **tidyverse** packages.
+
+```{r}
+#| label: load-packages
+#| warning: false
+
+library(tidyverse)
+library(scales)
+```
+
+# Data: The prognosticators
+
+The dataset we will visualize is called `seers`.[^1]
+It contains summary statistics for all known Groundhog Day forecasters.
+[^2] Let's `glimpse()` at it
+.
+
+[^1]: I would prefer [`prognosticators`](https://www.groundhog.org/prognostication), but I had way too many typos preparing these materials to make you all use it.
+
+[^2]: Source: [Countdown to Groundhog Day](https://countdowntogroundhogday.com/groundhogs-from-around-the-world).
+    Application exercise inspired by [Groundhogs Do Not Make Good Meteorologists](https://fivethirtyeight.com/features/groundhogs-do-not-make-good-meteorologists/) originally published on FiveThirtyEight.
+
+```{r}
+#| label: glimpse
+
+# import data using readr::read_csv()
+seers <- read_csv("data/prognosticators-sum-stats.csv")
+
+# add code here
+glimpse(seers)
+```
+
+The variables are:
+
+-   `name` - name of the prognosticator
+-   `forecaster_type` - what kind of animal or thing is the prognosticator?
+-   `forecaster_simple` - a simplified version that lumps together the least-frequently appearing types of prognosticators
+-   `alive` - is the prognosticator an animate (alive) being?[^3]
+-   `climate_region` - the [NOAA climate region](https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/regional/mapping) in which the prognosticator is located.
+-   `town` - self-explanatory
+-   `state` - state (or territory) where prognosticator is located
+-   `preds_n` - number of predictions in the database
+-   `preds_long_winter` - number of predictions for a "Late Winter" (as opposed to "Early Spring")
+-   `preds_long_winter_pct` - percentage of predictions for a "Late Winter"
+-   `preds_correct` - number of correct predictions[^4]
+-   `preds_rate` - proportion of predictions that are correct
+-   `temp_mean` - average temperature (in Fahrenheit) in February and March in the climate region across all prognostication years
+-   `temp_hist` - average of the rolling 15-year historic average temperature in February and March across all prognostication years
+-   `temp_sd` - standard deviation of average February and March temperatures across all prognostication years
+-   `precip_mean` - average amount of precipitation in February and March across all prognostication years (measured in rainfall inches)
+-   `precip_hist` average of the rolling 15-year historic average precipitation in February and March across all prognostication years
+-   `precip_sd` - standard deviation of average February and March precipitation across all prognostication years
+
+[^3]: Prognosticators labeled as Animatronic/Puppet/Statue/Stuffed/Taxidermied are classified as not alive.
+
+[^4]: We adopt the same definition as FiveThirtyEight.
+    An "Early Spring" is defined as any year in which the average temperature in either February or March was higher than the historic average.
+    A "Late Winter" was when the average temperature in both months was lower than or the same as the historical average.
+
+# Visualizing prediction success rate - Demo
+
+## Single variable
+
+::: callout-note
+Analyzing the a single variable is called **univariate** analysis.
+:::
+
+Create visualizations of the distribution of `preds_rate` for the prognosticators.
+
+1.  Make a histogram. Set an appropriate binwidth.
+
+```{r}
+#| label: histogram-preds-rate
+
+# add code here
+ggplot(data = seers, mapping = aes(x = preds_rate)) +
+  geom_histogram(binwidth = 0.02)
+```
+
+## Two variables - Your turn
+
+::: callout-note
+Analyzing the relationship between two variables is called **bivariate** analysis.
+:::
+
+Create visualizations of the distribution of `preds_rate` by `alive` (whether or not the prognosticator is alive).
+
+2.  Make a single histogram. Set an appropriate binwidth.
+
+```{r}
+#| label: histogram-preds-rate-alive
+
+# add code here
+ggplot(data = seers, mapping = aes(x = preds_rate, 
+                                   fill = alive)) +
+  geom_histogram(binwidth = 0.02)
+```
+
+3.  Use multiple histograms via faceting, one for each type. Set an appropriate binwidth, add color as you see fit, and turn off legends if not needed.
+
+```{r}
+#| label: histogram-preds-rate-alive-facet
+
+# add code here
+ggplot(data = seers, mapping = aes(x = preds_rate, 
+                                   fill = alive)) +
+  geom_histogram(binwidth = 0.02, show.legend = FALSE) +
+  facet_wrap(facets = vars(alive))
+```
+
+4.  Use side-by-side box plots. Add color as you see fit and turn off legends if not needed.
+
+```{r}
+#| label: boxplot-preds-rate-alive
+
+# add code here
+ggplot(data = seers, mapping = aes(y = preds_rate, 
+                                   x = alive)) +
+  geom_boxplot()
+```
+
+5.  Use a density plot. Add color as you see fit.
+
+```{r}
+#| label: density-preds-rate-alive
+
+# add code here
+ggplot(data = seers, mapping = aes(x = preds_rate, 
+                                   fill = alive, 
+                                   alpha = 0.50)) +
+  geom_density()
+```
+
+6.  Use a violin plot. Add color as you see fit and turn off legends if not needed.
+
+```{r}
+#| label: violin-preds-rate-alive
+
+# add code here
+ggplot(data = seers, mapping = aes(y = preds_rate, 
+                                   x = alive)) +
+  geom_violin()
+```
+
+7.  Make a jittered scatter plot. Add color as you see fit and turn off legends if not needed.
+
+```{r}
+#| label: jitter-preds-rate-alive
+
+# add code here
+set.seed(1)
+ggplot(data = seers, mapping = aes(y = preds_rate, 
+                                   x = alive,
+                                   color = alive)) +
+  geom_jitter(show.legend = FALSE)
+```
+
+8.  Use beeswarm plots. Add color as you see fit and turn off legends if not needed.
+
+```{r}
+#| label: beeswarm-preds-rate-alive
+
+library(ggbeeswarm)
+
+# add code here
+ggplot(data = seers,
+       mapping = aes(x = alive,
+                     y = preds_rate,
+                     color = alive)) + 
+  geom_beeswarm(show.legend = FALSE)
+```
+
+9.  **Demonstration**: Use multiple geoms on a single plot. Be deliberate about the order of plotting. Change the theme and the color scale of the plot. Finally, add informative labels.
+
+```{r}
+#| label: multi-geoms
+
+# add code here
+ggplot(data = seers,
+       mapping = aes(x = alive,
+                     y = preds_rate,
+                     color = alive)) + 
+  geom_beeswarm(show.legend = FALSE) + 
+  geom_boxplot(alpha = .25) + 
+  labs(title = "The Alive vs Dead Prognosticators Rates of Success",
+       subtitle = "Utilizing Beeswarm and Box Plot",
+       x = "Status of Prognosticators",
+       y = "Prediction Rate")
+```
+
+## Multiple variables - Demo
+
+::: callout-note
+Analyzing the relationship between three or more variables is called **multivariate** analysis.
+:::
+
+10. Facet the plot you created in the previous exercise by `forecaster_simple`. Adjust labels accordingly.
+
+```{r}
+#| label: multi-geoms-facet
+
+# add code here
+ggplot(data = seers,
+       mapping = aes(x = preds_rate,
+                     y = alive,
+                     color = alive)) + 
+  geom_beeswarm(show.legend = FALSE, color = "gray37", size = 1) + 
+  geom_boxplot(show.legend = FALSE,
+               alpha = 0.5) + 
+  facet_wrap(~forecaster_simple,
+             scales = "free") + 
+  labs(title = "The Alive vs Dead Prognosticators Rates of Success",
+       x = "Prediction Rate",
+       y = "Status of Prognosticators")
+```
+
+Before you continue, let's turn off all warnings the code chunks generate and resize all figures.
+We'll do this by editing the YAML.
+
+# Visualizing other variables - Your turn!
+
+11. Pick a single categorical variable from the data set and make a bar plot of its distribution.
+
+```{r}
+#| label: barplot
+
+# add code here
+ggplot(data = seers, 
+       mapping = aes(x = temp_mean, 
+                     fill = temp_mean)) +
+  geom_bar(width = 0.3)
+```
+
+12. Pick two categorical variables and make a visualization to visualize the relationship between the two variables. Along with your code and output, provide an interpretation of the visualization.
+
+```{r}
+#| label: cat-cat
+
+# add code here
+ggplot(data = seers, 
+       mapping = aes(x = temp_mean, 
+                     y = preds_rate, 
+                     fill = temp_mean)) +
+  geom_bar(stat="identity", width = 0.3) + 
+  scale_fill_gradient(low="deepskyblue2",high="firebrick1") + 
+  labs(title = "Relationship between Mean Temperature and Prediction Rate",
+       x = "Mean Temperature",
+       y = "Prediction Rate")
+```
+
+Interpretation goes here...
+
+The two categorical variables I chose was the Mean Temperature and Prediction Rate.
+I wanted to see if the temperature could have a relationship, whether causal or correlation, with how accurate the prognosticators correctly predicted.
+
+Simply based on the chart, it seems that the prognosticators usually guessed correctly when it was colder, specifically around the 35 degrees range.
+In turn, they predicted more incorrectly as the temperature went up, especially from 45 degrees to 50 degrees.
+
+13. Make another plot that uses at least three variables. At least one should be numeric and at least one categorical. In 1-2 sentences, describe what the plot shows about the relationships between the variables you plotted. Don't forget to label your code chunk.
+
+```{r}
+#| label: three-vars
+#| fig-height: 7
+
+# add code here
+ggplot(data = seers,
+       mapping = aes(x = preds_rate, 
+                     y = forecaster_type, 
+                     fill = preds_rate)) +
+  geom_point(show.legend = FALSE) + 
+  facet_grid(forecaster_simple ~ ., scales = "free", space = "free") +
+  theme(strip.text.y = element_text(angle = 0)) +
+  labs(title = "Relationship between Mean Temperature and Prediction Rate",
+       x = "Correct Predictions",
+       y = "Prognosticators Type")
+```
+
+Interpretation goes here...
+
+The plot describes how often the prognosticators correctly predict, sorted by their type and a simplified version of their type.
+You can also see which types of prognosticator are more popular based on a visual understanding of how many predictions were made.

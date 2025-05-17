@@ -1,0 +1,174 @@
+---
+title: "AE 03: Joining prognosticators"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+::: callout-important
+Go to the [course GitHub organization](https://github.coecis.cornell.edu/info5001-fa24) and locate the repo titled `ae-03-YOUR_GITHUB_USERNAME` to get started.
+
+This AE is due September 12 at 11:59pm.
+:::
+
+```{r}
+#| label: load-packages-data
+#| message: false
+
+library(tidyverse)
+library(scales)
+library("viridis")
+
+seers <- read_csv("data/prognosticators.csv")
+weather <- read_csv("data/weather-region.csv")
+```
+
+# Prognosticator success
+
+We previously examined the accuracy rate of Groundhog Day prognosticators.[^1] Today we want to work with the original dataset to understand how those accuracy metrics were generated and answer the question: **How does prognosticator accuracy vary by climatic region?**
+
+[^1]: See [ae-01](https://info2950.infosci.cornell.edu/ae/ae-01-prognosticators-A.html)
+
+Let's start by looking at the `seers` data frame.
+
+```{r}
+#| label: glimpse-seers
+
+glimpse(seers)
+```
+
+We have the predictions, but our goal is to make a visualization by climate region.[^2]
+
+[^2]: Source: [National Weather Service Climate Prediction Center](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/regional_monitoring/regions.shtml)
+
+![](images/climate-regions.png){fig-alt="The nine regions as defined by the National Climatic Data Center and regularly used in climate summaries."}
+
+# Join the data frames
+
+Let's take a look at the weather data frame.
+
+```{r}
+#| label: glimpse-weather
+
+glimpse(weather)
+```
+
+-   **Your turn (2 minutes):**
+    -   Which variable(s) will we use to join the `seers` and `weather` data frames?
+        -   Year
+    -   We want to keep all rows and columns from `seers` and add columns for corresponding weather data. Which join function should we use?
+        -   leftjoin
+-   **Demo:** Join the two data frames and assign the joined data frame to `seers_weather`.
+
+```{r}
+#| label: join-seers-weather
+
+# add code here
+seers_weather = inner_join(x = seers,
+                           y = weather,
+                           by = join_by(year, 
+                                        state == state_abb))
+```
+
+# Calculate the variables
+
+-   **Demo:** Take a look at the updated `seers` data frame. First we need to calculate for each prediction whether or not the prognostication was correct.
+
+```{r}
+#| label: data-clean
+
+# add code here
+seers_weather <- seers_weather |>
+  mutate(correct_pred = prediction == outcome)
+```
+
+-   **Demo:** Calculate the accuracy rate (we'll call it `preds_rate`) for weather predictions using the `summarize()` function in **dplyr**. Note that the function for calculating the mean is `mean()` in R.
+
+```{r}
+#| label: seers-mean
+
+# add code here
+seers_weather |>
+  group_by(region) |>
+  summarize(preds_rate = mean(correct_pred))
+```
+
+-   **Your turn (5 minutes):** Now expand your calculations to also calculate the number of predictions in each region and the standard error of accuracy rate. Store this data frame as `seers_summary`. Recall the formula for the standard error of a sample proportion:
+
+$$SE(\hat{p}) \approx \sqrt{\frac{(\hat{p})(1 - \hat{p})}{n}}$$
+
+```{r}
+#| label: seers-summary-save
+
+# add code here
+seers_summary <- seers_weather |>
+  group_by(region) |>
+  summarize(preds_rate = mean(correct_pred),
+            preds_n = n(),
+            preds_se = sqrt((preds_rate * (1-preds_rate)) / preds_n))
+```
+
+-   **Demo:** Take the `seers_summary` data frame and order the results in descending order of accuracy rate.
+
+```{r}
+#| label: seers-summary-sorted
+
+# add code here
+seers_summary |>
+  arrange(preds_rate)
+```
+
+# Recreate the plot
+
+-   **Demo:** Recreate the following plot using the data frame you have developed so far.
+
+![](images/prognosticator-accuracy-by-region.png){fig-align="center"}
+
+```{r}
+#| label: seers-summary-plot
+#| error: true
+
+# add code here
+seers_summary |>
+  mutate(region = fct_reorder(.f = region, .x = preds_rate)) |>
+  ggplot(mapping = aes(x = preds_rate, y = region)) +
+  geom_point(mapping = aes(size = preds_n)) +
+  geom_linerange(mapping = aes(xmin = preds_rate - preds_se,
+                               xmax = preds_rate + preds_se)) +
+  scale_x_continuous(labels = label_percent()) +
+  labs(
+    title = "Prognosticator accuracy rate for late winter/early spring",
+    subtitle = "By climate region",
+    x = "Prediction accuracy",
+    y = NULL,
+    size = "Total number\nof predictions",
+    caption = "Source: Countdown to Groundhog Day & NOAA"
+  ) +
+  theme_minimal()
+```
+
+-   **Your turn (time permitting):** Make any other changes you would like to improve it.
+
+```{r}
+#| label: plot-improve
+
+# add your code here
+seers_summary |>
+  mutate(region = fct_reorder(.f = region, 
+                              .x = preds_rate)) |>
+  ggplot(mapping = aes(x = preds_rate, 
+                       y = region,
+                       color = preds_rate)) +
+  geom_point(mapping = aes(size = preds_n)) +
+  geom_linerange(mapping = aes(xmin = preds_rate - preds_se,
+                               xmax = preds_rate + preds_se)) +
+  scale_x_continuous(labels = label_percent()) +
+  labs(
+    title = "Prognosticator accuracy rate for late winter/early spring",
+    subtitle = "By climate region",
+    x = "Prediction accuracy",
+    y = NULL,
+    size = "Total number\nof predictions",
+    caption = "Source: Countdown to Groundhog Day & NOAA"
+  ) +
+  theme_minimal()
+```

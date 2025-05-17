@@ -1,0 +1,108 @@
+---
+title: "Predicting children in hotel bookings"
+author: Your name
+format: html
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(tidymodels)
+
+hotels <- read_csv("data/hotels-lite.csv") |>
+  mutate(across(where(is.character), as.factor))
+hotels
+```
+
+# Your Turn 1
+
+Run the chunk below and look at the output. Then, copy/paste the code and edit to create:
+
++ a decision tree model for classification 
+
++ that uses the `C5.0` engine. 
+
+Save it as `tree_mod` and look at the object. What is different about the output?
+
+*Hint: you'll need https://www.tidymodels.org/find/parsnip/*
+
+```{r}
+lr_mod <- logistic_reg() |> 
+  set_engine(engine = "glm") |> 
+  set_mode("classification")
+lr_mod
+```
+
+```{r}
+
+
+```
+
+# Your Turn 2
+
+Fill in the blanks. 
+
+Use `initial_split()`, `training()`, and `testing()` to:
+
+1. Split **hotels** into training and test sets. Save the rsplit!
+
+2. Extract the training data and fit your classification tree model.
+
+3. Check the proportions of the `test` variable in each set.
+
+Keep `set.seed(100)` at the start of your code.
+
+*Hint: Be sure to remove every `_` before running the code!*
+
+```{r}
+set.seed(100) # Important!
+hotels_split <- ________(hotels, prop = 3 / 4)
+hotels_train <- ________(hotels_split)
+hotels_test <- ________(hotels_split)
+
+# check distribution
+count(x = hotels_train, children) |>
+  mutate(prop = n / sum(n))
+count(x = hotels_test, children) |>
+  mutate(prop = n / sum(n))
+```
+
+# Your Turn 3
+
+Run the code below. What does it return?
+
+```{r}
+set.seed(100)
+hotels_folds <- vfold_cv(data = hotels_train, v = 10)
+hotels_folds
+```
+
+# Your Turn 4
+
+Add a `autoplot()` to visualize the ROC AUC. How well does the model perform?
+
+```{r}
+tree_preds <- tree_mod |> 
+  fit_resamples(
+    children ~ average_daily_rate + stays_in_weekend_nights, 
+    resamples = hotels_folds,
+    control = control_resamples(save_pred = TRUE)
+  )
+
+tree_preds |>
+  collect_predictions() |>
+  roc_auc(truth = children, .pred_children)
+
+tree_preds |> 
+  collect_predictions() |> 
+  roc_curve(truth = children, .pred_children) |>
+  ________()
+```
+
+*Add response here.*
+
+# Acknowledgments
+
+- Materials derived from [Tidymodels, Virtually](https://tmv.netlify.app/site/) by [Allison Hill](https://www.apreshill.com/) and licensed under a [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA) License](https://creativecommons.org/licenses/by/4.0/).
+- Dataset and some modeling steps derived from [A predictive modeling case study](https://www.tidymodels.org/start/case-study/) and licensed under a [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA) License](https://creativecommons.org/licenses/by/4.0/).

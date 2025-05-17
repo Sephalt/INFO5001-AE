@@ -1,0 +1,253 @@
+---
+title: "AE 11: Querying the OMDB API with **httr2**"
+categories: 
+  - Application exercise
+---
+
+# Packages
+
+We will use the following packages in this application exercise.
+
+-   **tidyverse**: For data import, wrangling, and visualization.
+-   **httr2**: For querying APIs.
+-   **jsonlite**: For some formatting
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+library(httr2)
+library(jsonlite)
+```
+
+# Writing an API function
+
+If an R package has not already been written for an application programming interface (API), you can write your own function to query the API. In this application exercise, we will write a function to query the [Open Movie Database](http://www.omdbapi.com/).
+
+# Create a request
+
+The first step in querying an API is to create a request. A request is an object that contains the information needed to query the API. The `request()` function creates a request object. The `base_url` argument specifies the **base URL** of the API. The `req <-` syntax assigns the request object to the variable `req`.
+
+```{r}
+#| label: omdb-request
+
+omdb_req <- request(base_url = "http://www.omdbapi.com/")
+omdb_req
+```
+
+# Perform a dry run
+
+The `req_dry_run()` function performs a dry run of the request. A dry run is a test run of the request that does not actually query the API. It is useful for testing the request before actually querying the API.
+
+```{r}
+#| label: omdb-dry-run
+
+omdb_req |>
+  req_dry_run()
+```
+
+# Determine the shape of an API request
+
+In order to submit a request, we need to define the **shape** of the request, or the exact URL used to submit the request. The URL of the request is the base URL of the API plus the path of the request.
+
+APIs typically have three major components to the request:
+
+-   The **base URL** for the web service (here it is `http://www.omdbapi.com/`).
+-   The **resource path** which is the complete destination of the web service endpoint (OMDB API does not have a resource path).
+-   The **query parameters** which are the parameters passed to the web service endpoint.
+
+In order to create your request you need to read the documentation to see exactly how these components need to be specified.
+
+**Your turn:** Use the [OMDB documentation](https://www.omdbapi.com/#examples) to determine the shape of the request for information on *Sharknado*.
+
+``` http
+# add an example request here
+
+http://www.omdbapi.com/?t=sharknado&apikey=a3b07923
+```
+
+# Generate the query
+
+## Store your API key
+
+In order to access the OMDB API you need an API key. If you do not have one, use the example key provided on Canvas.
+
+**Your turn:** Store your API key in `.Renviron` so you can access it in your code. Once you have saved the file, restart your R session to ensure the new environment variable is loaded.
+
+``` r
+# from the console run:
+usethis::edit_r_environ()
+
+# in .Renviron add:
+omdb_key="a3b07923"
+```
+
+```{r}
+#| label: omdb-path
+
+# add code here
+Sys.getenv("omdb_key")
+
+omdb_req |>
+  req_url_query(
+    apikey = Sys.getenv("omdb_key"),
+    t = "Sharknado"
+  ) |>
+  req_dry_run()
+```
+
+## Fetch the response
+
+The `req_perform()` function fetches the response from the API. The response is stored as a response object.
+
+```{r}
+#| label: omdb-response
+
+# add code here
+
+sharknado <- omdb_req |>
+  req_url_query(
+    apikey = Sys.getenv("omdb_key"),
+    t = "Sharknado"
+  ) |>
+  req_perform()
+
+sharknado
+```
+
+# What did we get?
+
+The HTTP response contains a number of useful pieces of information.
+
+## Status code
+
+The **status code** is a number that indicates whether the request was successful. A status code of 200 indicates success. A status code of 400 or 500 indicates an error. `resp_status()` retrieves the numeric HTTP status code, whereas `resp_status_desc()` retrieves a brief textual description of the status code.
+
+```{r}
+#| label: omdb-status-codes
+
+# add code here
+sharknado |>
+  resp_status_desc()
+```
+
+### HTTP status codes
+
+Hopefully all you receive is a 200 code indicating the query was successful. If you get something different, the error code is useful in debugging your code and determining what (if anything) you can do to fix it
+
+| Code | Status                                    |
+|------|-------------------------------------------|
+| 1xx  | Informational                             |
+| 2xx  | Success                                   |
+| 3xx  | Redirection                               |
+| 4xx  | Client error (you did something wrong)    |
+| 5xx  | Server error (server did something wrong) |
+
+::: callout-tip
+[A more intuitive guide to HTTP status codes.](https://www.flickr.com/photos/girliemac/sets/72157628409467125)
+:::
+
+## Body
+
+The **body** of the response contains the actual data returned by the API. The body is a string of characters.
+
+You can extract the body in various forms using the `resp_body_*()` family of functions. The `resp_body_string()` function retrieves the body as a string.
+
+```{r}
+#| label: omdb-body
+
+# add code here
+sharknado |>
+  resp_body_string() |>
+  prettify()
+```
+
+## JSON
+
+Here the result is actually formatted as using **JavaScript Object Notation (JSON)**, so we can use `resp_body_json()` to extract the data and store it as a list object in R.
+
+```{r}
+#| label: omdb-json
+
+# add code here
+sharknado |>
+  resp_body_json()
+```
+
+## Convert to data frame
+
+For data analysis purposes, we prefer that the data be stored as a data frame. The `as_tibble()` function converts the list object to a tibble.
+
+```{r}
+#| label: omdb-tibble
+
+# add code here
+sharknado |>
+  resp_body_json() |>
+  as_tibble()
+```
+
+# Write a function to query the OMDB API
+
+*Sharknado* proved so popular that four sequels were made. Let's write a function to query the OMDB API for information on any of the *Sharknado* films.
+
+**Your turn:** Your function should:
+
+-   Take a single argument (the title of the film)
+-   Print a message using the `message()` function to track progress
+-   Use **throttling** to ensure we do not overload the server and exceed any rate limits. Add `req_throttle()` to the request pipeline to limit the rate to 15 requests per minute.
+-   Return a tibble with the information from the API
+
+```{r}
+#| label: omdb-func
+
+omdb_api <- function(title){
+
+#print a message to track progress
+  message(str_glue("Scraping {title}"))
+  
+#Create the request
+ req <- request(base_url = "http://www.omdbapi.com/") |>
+    req_url_query(
+      apikey = Sys.getenv("omdb_key"),
+      t = title
+    ) |>
+    req_throttle(rate = 15 / 60) #requests divided by seconds
+ 
+ #Perform the request
+ req_results <- req |>
+   req_perform()
+ 
+ #Extract the results
+ req_df <- req_results |>
+   resp_body_json() |>
+   as_tibble()
+ 
+ return(req_df)
+}
+```
+
+Once you have written your function, test it out by querying the API for information on "Sharknado". Then apply an iterative operation to query the API for information on all five *Sharknado* films and store it in a single data frame.
+
+```{r}
+#| label: omdb-sharknados
+
+# test function
+omdb_api(title = "Sharknado")
+
+# titles of films
+sharknados <- c(
+  "Sharknado", "Sharknado 2", "Sharknado 3",
+  "Sharknado 4", "Sharknado 5"
+)
+
+# iterate over titles and query API
+sharknados_df <- map(.x = sharknados, .f = omdb_api) |>
+  list_rbind()
+sharknados_df
+```
+
+# Acknowledgments
+
+-   These exercises draw substantially on the [**httr2** vignettes](https://httr2.r-lib.org/articles/index.html) and [reference documentation](https://httr2.r-lib.org/reference/index.html).

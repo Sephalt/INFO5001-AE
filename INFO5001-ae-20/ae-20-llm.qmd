@@ -1,0 +1,155 @@
+---
+title: "Programmatically interacting with LLMs"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+# Load packages
+
+```{r}
+#| label: packages
+#| cache: false
+
+library(tidyllm)
+```
+
+# Set up API key
+
+::: callout-warning
+If you have not already completed the pre-class preparation to [set up your API key](/tutorials/openai-key.qmd), do this now.
+:::
+
+**Your turn:** Run `Sys.getenv("OPENAI_API_KEY")` **from your console** to ensure your API key is set up correctly.
+
+# Basic usage
+
+**Your turn:** Initiate a basic conversation with the GPT-4o model by asking "What is R programming?" and then follow up with a relevant question..
+
+```{r}
+#| label: basic-usage
+
+# add code here
+what_is_r <- llm_message("What is R programming?",
+                         .system_prompt = "You are a helpful assistant who talks to Gen Z people. 
+                         Speak in their language.") |>
+  openai()
+
+what_is_r
+
+what_is_r |>
+  llm_message("How does the tidyverse relate to R programming") |>
+  openai(.stream = TRUE)
+
+
+```
+
+# Adding additional inputs
+
+## Images
+
+**Your turn:** Use the documentation for `llm_message()` to have GPT-4o describe the two images below.
+
+![Image credit: [Cornell Photos](https://photo.cornell.edu/dam/assetdetails/asset:1449b5fa-8e41-4828-b7a7-4423b8e0d977)](data/llm/0654_14_041_select.jpg)
+
+![Image credit: [Cornell Photos](https://photo.cornell.edu/dam/assetdetails/asset:ea2a52f5-5fec-4e92-bd41-cce4d6252da7)](data/llm/0792_05_B3_select.jpg)
+
+```{r}
+#| label: image-describe
+
+# add code here
+
+garden_describe <- llmk_message("Describe this picture.",
+                                .imagefile = "data/llm/0792_05_B3_select.jpg") |>
+  openai()
+  
+last_reply(garden_describe)
+
+garden_describe |>
+  llm_message("Make your message more concise.") |>
+  openai()
+
+seal_describe <- llm_message("Describe this picture.",
+                             .imagefile = "data/llm/0654_14_041_select.jpg") |>
+  openai()
+  
+last_reply(seal_describe)
+                             
+
+
+```
+
+## PDFs
+
+**Your turn:** Use generative AI to summarize the contents of my doctoral dissertation.
+
+```{r}
+#| label: pdf-describe
+
+# add code here
+
+pdf_describe <-
+  llm_message("Summarize the PDF file.",
+              .pdf = "data/llm/soltoff_dissertation_final.pdf") |>
+  openai(.model = "gpt-4o-mini")
+
+last_reply(pdf_describe)
+
+```
+
+# API parameters
+
+## Temperature
+
+**Your turn:** Use GPT-4o to create a knock knock joke. Generate separate conversations using the same prompt and vary the `temperature` setting to see how it affects the output.
+
+::: callout-note
+For GPT-4o, the `temperature` parameter controls the randomness of the output. A low temperature will result in more deterministic responses, while a high temperature will result in more random responses. It ranges from $[0, 2]$ with a default value of 1.
+:::
+
+```{r}
+#| label: temp
+
+# default value is 1
+llm_message("Create a knock knock joke about dinosaurs that would amuse my 8 year old child.") |>
+  openai(.temperature = NULL)
+
+# add code here
+
+```
+
+## System prompt
+
+**Your turn:** Write a system prompt for an R tutor chatbot. The chatbot will be deployed for INFO 2950 or INFO 5001 to assistant students in meeting the learning objectives for the courses. It should behave similar to a human TA in that it supports students without providing direct answers to assignments or exams. Test your new system prompt on the student prompts below and evaluate the responses it produces.
+
+::: callout-tip
+You can modify the system prompt in `llm_message()` using the `.system_prompt` argument.
+:::
+
+```{r}
+#| label: student-prompts
+percentage_prompt <- "How do I format my axis labels as percentages?"
+diamonds_prompt <- "Fix this code for me:
+
+``` r
+library(tidyverse)
+count(diamonds, colour)
+#> Error in `count()`:
+#> ! Must group by variables found in `.data`.
+#> ✖ Column `colour` is not found.
+```"
+```
+
+```{r}
+#| label: tutor
+#| dependson: student-prompts
+
+tutor_prompt <- "TODO"
+
+# add code here
+
+```
+
+# Additional resources
+
+- [{tidyllm} documentation](https://edubruell.github.io/tidyllm/)
+- [OpenAI documentation](https://platform.openai.com/docs/overview)

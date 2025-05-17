@@ -1,0 +1,316 @@
+---
+title: "AE 02: Wrangling college education metrics"
+author: "Christina Feng (cef229)"
+format: html
+editor: 
+  markdown: 
+    wrap: sentence
+---
+
+::: callout-important
+Go to the [course GitHub organization](https://github.coecis.cornell.edu/info5001-fa24) and locate the repo titled `ae-02-YOUR_GITHUB_USERNAME` to get started.
+
+This AE is due September 10 at 11:59pm.
+:::
+
+To demonstrate data wrangling we will use data from [College Scorecard](https://collegescorecard.ed.gov/).[^1]
+The subset we will analyze contains a small number of metrics for all four-year colleges and universities in the United States for the 2022-23 academic year.
+[^2]
+
+[^1]: College Scorecard is a product of the U.S.
+    Department of Education and compiles detailed information about student completion, debt and repayment, earnings, and more for all degree-granting institutions across the country.
+
+[^2]: From [**dplyr** vignette](https://dplyr.tidyverse.org/articles/dplyr.html)
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+```
+
+The data is stored in `scorecard.csv`.
+The variables are:
+
+-   `unit_id` - Unit ID for institution
+-   `name` - Name of the college
+-   `state` - State abbreviation
+-   `type` - Type of college (Public; Private, nonprofit; Private, for-profit)
+-   `adm_rate` - Undergraduate admissions rate (from 0-100%)
+-   `sat_avg` - Average SAT equivalent score of students admitted
+-   `cost` - The average annual total cost of attendance, including tuition and fees, books and supplies, and living expenses
+-   `net_cost` - The average annual net cost of attendance (annual cost of attendance minus the average grant/scholarship aid)
+-   `avg_fac_sal` - Average faculty salary (9 month)
+-   `pct_pell` - Percentage of undergraduates who receive a Pell Grant
+-   `comp_rate` - Rate of first-time, full-time students at four-year institutions who complete their degree within six years
+-   `first_gen` - Share of first-generation students
+-   `debt` - Median debt of students after leaving school
+-   `locale` - Locale of institution
+
+```{r}
+#| label: import-data
+#| message: false
+
+scorecard <- read_csv("data/scorecard.csv")
+```
+
+The data frame has over 1700 observations (rows), `r nrow(scorecard)` observations to be exact, so we will **not** view the entire data frame.
+Instead we'll use the commands below to help us explore the data.
+
+```{r}
+#| label: glimpse-data
+
+glimpse(scorecard)
+```
+
+```{r}
+#| label: column-names
+
+names(scorecard)
+```
+
+```{r}
+#| label: explore-data
+
+head(scorecard)
+
+as.data.frame(scorecard)
+```
+
+The `head()` function returns "A tibble: 6 x 14" and then the first six rows of the `scorecard` data.
+
+# Tibble vs. data frame
+
+A **tibble** is an opinionated version of the `R` data frame.
+In other words, all tibbles are data frames, but not all data frames are tibbles!
+
+There are two main differences between a tibble and a data frame:
+
+1.  When you print a tibble, the first ten rows and all of the columns that fit on the screen will display, along with the type of each column.
+
+    Let's look at the differences in the output when we type `scorecard` (tibble) in the console versus typing `cars` (data frame) in the console.
+
+2.  Second, tibbles are somewhat more strict than data frames when it comes to subsetting data.
+    You will get a warning message if you try to access a variable that doesn't exist in a tibble.
+    You will get `NULL` if you try to access a variable that doesn't exist in a data frame.
+
+```{r}
+#| label: tibble-v-data-frame
+
+scorecard$apple
+cars$apple
+```
+
+# Data wrangling with dplyr
+
+**dplyr** is the primary package in the **tidyverse** for data wrangling.
+
+::: {.callout-note title="Helpful data wrangling resources"}
+-   [**dplyr** reference page](https://dplyr.tidyverse.org/)
+-   [Data transformation cheatsheet](https://rstudio.github.io/cheatsheets/html/data-transformation.html)
+:::
+
+## Quick summary of key **dplyr** functions[^3]
+
+[^3]: From [**dplyr** vignette](https://dplyr.tidyverse.org/articles/dplyr.html)
+
+**Rows:**
+
+-   `filter()`:chooses rows based on column values.
+-   `slice()`: chooses rows based on location.
+-   `arrange()`: changes the order of the rows
+-   `sample_n()`: take a random subset of the rows
+
+**Columns:**
+
+-   `select()`: changes whether or not a column is included.
+-   `rename()`: changes the name of columns.
+-   `mutate()`: changes the values of columns and creates new columns.
+
+**Groups of rows:**
+
+-   `summarize()`: collapses a group into a single row.
+-   `count()`: count unique values of one or more variables.
+-   `group_by()`: perform calculations separately for each value of a variable
+
+## Operators
+
+In order to make comparisons, we will use **logical operators**.
+These should be familiar from other programming languages.
+See below for a reference table for how to use these operators in R.
+
+| operator      | definition                   |
+|:--------------|:-----------------------------|
+| `<`           | is less than?                |
+| `<=`          | is less than or equal to?    |
+| `>`           | is greater than?             |
+| `>=`          | is greater than or equal to? |
+| `==`          | is exactly equal to?         |
+| `!=`          | is not equal to?             |
+| `x & y`       | is x AND y?                  |
+| `x | y`       | is x OR y?                   |
+| `is.na(x)`    | is x NA?                     |
+| `!is.na(x)`   | is x not NA?                 |
+| `x %in% y`    | is x in y?                   |
+| `!(x %in% y)` | is x not in y?               |
+| `!x`          | is not x?                    |
+
+The final operator only makes sense if `x` is logical (TRUE / FALSE).
+
+## The pipe
+
+Before working with data wrangling functions, let's formally introduce the pipe.
+The **pipe**, `|>`, is an operator (a tool) for passing information from one process to another.
+We will use `|>` mainly in data pipelines to pass the output of the previous line of code as the first input of the next line of code.
+
+When reading code "in English", say "and then" whenever you see a pipe.
+
+-   **Your turn (3 minutes):** Run the following chunk and observe its output. Then, come up with a different way of obtaining the same output.
+
+```{r}
+#| label: pipe-demo
+
+scorecard |>
+  select(name, type) |>
+  head()
+
+# add code here
+head(select(scorecard, name, type))
+
+head(scorecard[,c("name","type")])
+     
+select(scorecard, name, type) |>
+  head()
+
+scorecard_lite <- select(scorecard, name, type)
+head(scorecard_lite)
+```
+
+# Exercises
+
+## Single function transformations
+
+**Demo:** Select the `name` column.
+
+```{r}
+#| label: select-name
+
+# add code here
+select(.data = scorecard, name)
+```
+
+**Demo:** Select all columns except `unit_id`.
+
+```{r}
+#| label: select-unit_id
+
+# add code here
+select(.data = scorecard, -unit_id)
+names(scorecard)
+select(.data = scorecard, name:locale)
+```
+
+**Demo:** Filter the data frame to keep only schools with a greater than 40% share of first-generation students.
+
+```{r}
+#| label: filter-first_gen
+
+# add code here
+filter(.data = scorecard, first_gen > 0.4)
+```
+
+**Your turn:** Filter the data frame to keep only public schools with a net cost of attendance below \$12,000.
+
+```{r}
+#| label: filter-public-net_cost
+
+# add code here
+filter(.data = scorecard, type == "Public", net_cost <12000)
+```
+
+## Multiple function transformations
+
+**Your turn:** How many public colleges and universities in each state have a net cost of attendance below \$12,000?
+
+```{r}
+#| label: filter-public-net_cost-count
+
+# add code here
+filter(.data = scorecard, type == "Public", net_cost < 12000) |>
+  count(state)
+
+filter(.data = scorecard, type == "Public", net_cost < 12000) |>
+  group_by(state) |>
+  summarize(n = n())
+```
+
+**Your turn:** Generate a data frame with the 10 most expensive colleges in 2022-23 based on net cost of attendance.
+
+```{r}
+#| label: top-10-arrange-slice
+
+# add code here
+scorecard |>
+  arrange(desc(net_cost)) |>
+  slice(1:10)
+
+arrange(.data = scorecard, -net_cost) |>
+    slice(1:10)
+
+slice_max(.data = scorecard, 
+          order_by = net_cost, 
+          n = 10)
+```
+
+**Your turn:** Generate a data frame with the average SAT score for each type of college.
+
+Note that since the `sat_avg` column contains `NA`s (missing values), we need to explicitly exclude them from our mean calculation.
+Otherwise the resulting data frame contains `NA`s.
+
+```{r}
+#| label: highest-sat
+
+# add code here
+scorecard |>
+  drop_na(sat_avg) |>
+  group_by(type) |>
+  summarize(mean_sat = mean(x = sat_avg))
+
+scorecard |>
+  group_by(type) |>
+  summarize(mean_sat = mean(x = sat_avg, na.rm = TRUE))
+```
+
+**Your turn:** Calculate for each school how many students it takes to pay the average faculty member's salary and generate a data frame with the school's name, net cost of attendance, average faculty salary, and the calculated value.
+How many Cornell and Ithaca College students does it take to pay their average faculty member's salary?
+
+::: callout-note
+You should use the net cost of attendance measure, not the sticker price.
+:::
+
+```{r}
+#| label: avg-sal
+
+# add code here
+
+filter(.data = scorecard, name %in% c("Cornell University", "Ithaca College")) |>
+  mutate(students_to_pay_salary = avg_fac_sal / net_cost) |>
+  select(name, net_cost, avg_fac_sal, students_to_pay_salary)
+
+```
+
+**Your turn:** Calculate how many private, nonprofit schools have a smaller net cost than Cornell University.
+
+::: callout-hint
+You will need to create a new column that ranks the schools by net cost of attendance.
+Look at the back of the **dplyr** cheatsheet for functions that can be used to calculate rankings.
+:::
+
+```{r}
+#| label: cornell-net-cost
+
+# add code here
+scorecard |>
+  summarize(cornell_cost = net_cost[name == "Cornell University"],
+            count = sum(type == "Private, nonprofit" & net_cost < cornell_cost))
+```

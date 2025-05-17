@@ -1,0 +1,158 @@
+---
+title: "Tune better models to predict children in hotel bookings"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(tidymodels)
+
+hotels <- read_csv("data/hotels-lite.csv") |>
+  mutate(across(where(is.character), as.factor))
+
+set.seed(100)
+hotels_split  <- initial_split(hotels, prop = .9)
+hotels_train  <- training(hotels_split)
+hotels_test   <- testing(hotels_split)
+
+set.seed(100)
+hotels_folds <- vfold_cv(hotels_train, v = 10)
+```
+
+# Your Turn 1
+
+Fill in the blanks to return the accuracy and ROC AUC for this model using 10-fold cross-validation.
+
+```{r}
+tree_mod <- decision_tree(engine = "rpart") |>
+  set_mode("classification")
+
+tree_wf <- workflow() |>
+  add_formula(children ~ .) |>
+  add_model(tree_mod)
+```
+
+```{r}
+set.seed(100)
+tree_wf |>
+  fit_resamples(resamples = hotels_folds) |>
+  collect_metrics()
+```
+
+# Your Turn 2
+
+Create a new parsnip model called `rf_mod`, which will learn an ensemble of classification trees from our training data using the **ranger** package. Update your `tree_wf` with this new model.
+
+Fit your workflow with 10-fold cross-validation and compare the ROC AUC of the random forest to your single decision tree model --- which predicts the test set better?
+
+*Hint: you'll need https://www.tidymodels.org/find/parsnip/*
+
+```{r}
+# model
+rf_mod <- rand_forest(engine = "ranger") |>
+  set_mode("classification")
+
+rf_wf <- tree_wf |>
+  update_model(rf_mod)
+
+set.seed(100)
+rf_wf |>
+  fit_resamples(resamples = hotels_folds) |>
+  collect_metrics()
+```
+
+# Your Turn 3
+
+Challenge: Fit 3 more random forest models, each using 5, 12, and 21 variables at each split. Update your `rf_wf` with each new model. Which value maximizes the area under the ROC curve?
+
+```{r}
+rf5_mod <- rf_mod |> 
+  set_args(mtry = 5) 
+
+rf12_mod <- rf_mod |> 
+  set_args(mtry = 12) 
+
+rf21_mod <- rf_mod |> 
+  set_args(mtry = 21) 
+```
+
+Do this for each model above:
+
+```{r}
+rf5_wf <- rf_wf |>
+  update_model(rf5_mod)
+
+set.seed(100)
+rf5_wf |>
+  fit_resamples(resamples = hotels_folds) |>
+  collect_metrics()
+```
+
+# Your Turn 4
+
+Edit the random forest model to tune the `mtry` and `min_n` hyper-parameters; call the new model spec `rf_tuner`.
+
+Update your workflow to use the tuned model.
+
+Then use `tune_grid()` to find the best combination of hyper-parameters to maximize `roc_auc`; let tune set up the grid for you.
+
+How does it compare to the average ROC AUC across folds from `fit_resamples()`?
+
+```{r}
+rf_mod <- rand_forest(engine = "ranger") |> 
+  set_mode("classification")
+
+rf_wf <- workflow() |> 
+  add_formula(children ~ .) |> 
+  add_model(rf_mod)
+
+set.seed(100)
+rf_results <- rf_wf |> 
+  fit_resamples(resamples = hotels_folds,
+                metrics = metric_set(roc_auc),
+                control = control_resamples(verbose = TRUE,
+                                            save_workflow = TRUE))
+
+rf_results |> 
+  collect_metrics()
+```
+
+```{r}
+expand_grid(mtry = c(1, 5), min_n = 1:3)
+
+rf_results |>
+  show_best(metric = "roc_auc", n = 5)
+
+last_rf_fit <- fit_best(rf_results, verbose = TRUE)
+
+```
+
+# Your Turn 5
+
+Use `fit_best()` to take the best combination of hyper-parameters from `rf_results` and use them to predict the test set.
+
+How does our actual test ROC AUC compare to our cross-validated estimate?
+
+```{r}
+hotels_best <- fit_best(rf_results)
+
+rf_results |>
+  show_best(metric = "roc_auc", n = 1)
+
+
+augment(hotels_best, new_data = hotels_test) |>
+  roc_curve(truth = children, .pred_children) |>
+  autoplot()
+
+
+hotels_best
+
+```
+
+# Acknowledgments
+
+- Materials derived from [Tidymodels, Virtually: An Introduction to Machine Learning with Tidymodels](https://tmv.netlify.app/site/) by [Allison Hill](https://www.apreshill.com/).
+- Dataset and some modeling steps derived from [A predictive modeling case study](https://www.tidymodels.org/start/case-study/) and licensed under a [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA) License](https://creativecommons.org/licenses/by/4.0/).

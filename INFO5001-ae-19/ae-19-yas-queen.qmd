@@ -1,0 +1,469 @@
+---
+title: "Slay: Predicting song artist based on lyrics"
+author: "Christina Feng (cef229)"
+format: html
+---
+
+```{r}
+#| label: packages
+#| message: false
+#| cache: false
+
+library(tidyverse)
+library(tidymodels)
+library(stringr)
+library(textrecipes)
+library(textdata)
+library(discrim)
+library(themis)
+library(vip)
+
+# set seed for randomization
+set.seed(123)
+
+theme_set(theme_minimal(base_size = 13))
+```
+
+# Import data
+
+```{r}
+#| label: get-data
+lyrics <- read_csv(file = "data/beyonce-swift-lyrics.csv") |>
+  mutate(artist = factor(artist))
+lyrics
+```
+
+# Split the data into analysis/assessment/test sets
+
+**Demonstration:**
+
+-   Split the data into training/test sets with 75% allocated for training
+-   Split the training set into 10 cross-validation folds
+
+```{r}
+#| label: split
+#| dependson: get-data
+# split into training/testing
+set.seed(123)
+lyrics_split <- initial_split(data = lyrics, strata = artist, prop = 0.75)
+
+lyrics_train <- training(lyrics_split)
+lyrics_test <- testing(lyrics_split)
+
+# create cross-validation folds
+lyrics_folds <- vfold_cv(data = lyrics_train, strata = artist)
+```
+
+# Estimate the null model for a baseline comparison
+
+**Demonstration:** Estimate a null model to determine an appropriate baseline for evaluating a model's performance.
+
+```{r}
+#| label: null-mod
+#| dependson: split
+
+null_spec <- null_model() |>
+  set_engine("parsnip") |>
+  set_mode("classification")
+
+null_spec |>
+  fit_resamples(
+    # pick something as the predictor - doesn't really matter
+    artist ~ danceability,
+    resamples = lyrics_folds
+  ) |>
+  collect_metrics()
+```
+
+# Fit a random forest model
+
+## Define the feature engineering recipe
+
+**Demonstration:**
+
+-   Define a feature engineering recipe to predict the song's artist as a function of the lyrics + audio features
+-   Exclude the ID variables from the recipe
+-   Tokenize the song lyrics
+-   Remove stop words
+-   Only keep the 500 most frequently appearing tokens
+-   Calculate tf-idf scores for the remaining tokens
+    -   This will generate one column for every token. Each column will have the standardized name `tfidf_lyrics_*` where `*` is the specific token. Instead we would prefer the column names simply be `*`. You can remove the `tfidf_lyrics_` prefix using
+
+        ``` r
+        # Simplify these names
+        step_rename_at(starts_with("tfidf_lyrics_"),
+          fn = \(x) str_replace_all(
+            string = x,
+            pattern = "tfidf_lyrics_",
+            replacement = ""
+          )
+        )
+        ```
+
+    -   This does cause a conflict between the `energy` audio feature and the token `energy`. Before removing the `"tfidf_lyrics_"` prefix, we will add a prefix to the audio features to avoid this conflict.
+
+        ``` r
+        # Simplify these names
+        step_rename_at(
+          all_predictors(), -starts_with("tfidf_lyrics_"),
+          fn = \(x) str_glue("af_{x}")
+        )
+        ```
+-   Downsample the observations so there are an equal number of songs by Beyoncé and Taylor Swift in the analysis set
+
+```{r}
+#| label: rf-rec
+#| dependson: split
+
+rf_rec <- recipe(artist ~ ., 
+                 data = lyrics_train) |>
+  step_tokenize(lyrics) |>
+  step_stopwords(lyrics) |>
+  step_tfidf(lyrics) |>
+  step_rename_at(
+    starts_with("tfidf_lyrics_"),
+    fn = \(x) str_replace_all(x, "tfidf_lyrics_", "")) |>
+
+  step_select(all_of(names(select(lyrics_train, 
+                                  starts_with("tfidf_lyrics_")))[1:500])) |>
+  step_downsample(artist)
+
+rf_rec
+```
+
+## Fit the model
+
+**Demonstration:**
+
+-   Define a random forest model grown with 1000 trees using the `ranger` engine.
+-   Define a workflow using the feature engineering recipe and random forest model specification. Fit the workflow using the cross-validation folds.
+    -   Use `control = control_resamples(save_pred = TRUE)` to save the assessment set predictions. We need these to assess the model's performance.
+    -   Use `control = control_resamples(save_workflow = TRUE)` to save the workflow object. We need this later on if we want to fit a single model using the same workflow and the entire training set.
+
+```{r}
+#| label: rf-fit
+#| dependson: split, rf-rec
+# define the model specification
+rf_spec <- rand_forest(trees = 1000) |>
+  set_mode("classification") |>
+  # calculate feature importance metrics using the ranger engine
+  set_engine("ranger", importance = "permutation")
+
+# define the workflow
+rf_wf <- workflow() |>
+  add_recipe(rf_rec) |>
+  add_model(rf_spec)
+
+# fit the model to each of the cross-validation folds
+rf_cv <- rf_wf |>
+  fit_resamples(
+    resamples = lyrics_folds,
+    control = control_resamples(save_pred = TRUE, save_workflow = TRUE, verbose = TRUE)
+  )
+```
+
+## Evaluate model performance
+
+**Demonstration:**
+
+-   Calculate the model's accuracy and ROC AUC. How did it perform?
+-   Draw the ROC curve for each validation fold
+-   Generate the resampled confusion matrix for the model and draw it using a heatmap. How does the model perform predicting Beyoncé songs relative to Taylor Swift songs?
+
+```{r}
+#| label: rf-metrics
+#| dependson: rf-fit
+# extract metrics and predictions
+rf_cv_metrics <- collect_metrics(rf_cv)
+rf_cv_predictions <- collect_predictions(rf_cv)
+
+# how well did the model perform?
+rf_cv_metrics
+
+# roc curve
+rf_cv_predictions |>
+  group_by(id) |>
+  roc_curve(truth = artist, .pred_Beyoncé) |>
+  autoplot()
+
+# confusion matrix
+conf_mat_resampled(x = rf_cv, tidy = FALSE) |>
+  autoplot(type = "heatmap")
+```
+
+*Add response here.*
+
+# Penalized regression
+
+## Define the feature engineering recipe
+
+**Demonstration:**
+
+-   Define a feature engineering recipe to predict the song's artist as a function of the lyrics + audio features
+-   Exclude the ID variables from the recipe
+-   Tokenize the song lyrics
+-   **Calculate all possible 1-grams, 2-grams, 3-grams, 4-grams, and 5-grams**
+-   Remove stop words
+-   Only keep the **2000** most frequently appearing tokens
+-   Calculate tf-idf scores for the remaining tokens
+-   Rename audio feature and tf-idf as before
+-   Apply required steps for penalized regression models
+    -   Convert the `explicit` variable to a factor
+    -   Convert nominal predictors to dummy variables
+    -   Get rid of zero-variance predictors
+    -   Normalize all predictors to mean of 0 and variance of 1
+-   Downsample the observations so there are an equal number of songs by Beyoncé and Taylor Swift in the analysis set
+
+```{r}
+#| label: rec-glmnet
+#| dependson: split
+
+glmnet_rec <- recipe(artist ~ ., data = lyrics_train) |>
+  
+  step_tokenize(lyrics) |>
+  step_stopwords(lyrics) |>
+  step_novel(lyrics) |>
+  step_tfidf(lyrics, num_features = 2000) |>
+  step_dummy(all_nominal()) |>
+  step_zv(all_predictors()) |>
+  step_center(all_predictors()) |>
+  step_scale(all_predictors()) |>
+  step_downsample(artist)
+
+glmnet_rec
+```
+
+## Tune the penalized regression model
+
+**Demonstration:**
+
+-   Define the penalized regression model specification, including tuning placeholders for `penalty` and `mixture`
+-   Create the workflow object
+-   Define a tuning grid with every combination of:
+    -   `penalty = 10^seq(-6, -1, length.out = 20)`
+    -   `mixture = c(0, 0.2, 0.4, 0.6, 0.8, 1)`
+-   Tune the model using the cross-validation folds
+-   Evaluate the tuning procedure and identify the best performing models based on ROC AUC
+
+```{r}
+#| label: glmnet-tune
+#| dependson: split, rec-glmnet
+# define the penalized regression model specification
+glmnet_spec <- logistic_reg(penalty = tune(), mixture = tune()) |>
+  set_mode("classification") |>
+  set_engine("glmnet")
+
+# define the new workflow
+glmnet_wf <- workflow() |>
+  add_recipe(glmnet_rec) |>
+  add_model(glmnet_spec)
+
+# create the tuning grid
+glmnet_grid <- expand_grid(
+  penalty = 10^seq(-6, -1, length.out = 20),
+  mixture = c(0, 0.2, 0.4, 0.6, 0.8, 1)
+)
+
+# tune over the model hyperparameters
+glmnet_tune <- tune_grid(
+  object = glmnet_wf,
+  resamples = lyrics_folds,
+  grid = glmnet_grid,
+  control = control_grid(save_pred = TRUE, save_workflow = TRUE, verbose = TRUE)
+)
+```
+
+```{r}
+#| label: glmnet-metrics
+#| dependson: glmnet
+# evaluate results
+collect_metrics(x = glmnet_tune)
+autoplot(glmnet_tune)
+
+# identify the five best hyperparameter combinations
+show_best(x = glmnet_tune, metric = "roc_auc")
+```
+
+*Add response here.*
+
+# Random forest with word embeddings
+
+## Define the feature engineering recipe
+
+**Demonstration:** Rather than using individual tokens and tf-idf scores, we will use pre-trained word embeddings to represent the lyrics. We will calculate the aggregate embedding for each song by averaging the embeddings of all the words in the song, then tune a random forest model using these embeddings.
+
+::: callout-note
+Normally in order to import GloVe embeddings you would use the code below:
+
+``` r
+glove_embed <- embedding_glove6b(dimensions = 100)
+```
+
+This downloads the ZIP file containing the embeddings, stores it in a cache folder, and then imports the requested embeddings and dimensions as a data frame. Note that many of the embeddings are stored in ZIP files that are multiple gigabytes in size. Often it is easier to manually download the files and store them in the appropriate location outside of R. See [the documentation for `embedding_glove*()`](https://emilhvitfeldt.github.io/textdata/reference/embedding_glove.html) for more information.
+:::
+
+```{r}
+#| label: rf-embeds-rec
+#| dependson: split
+
+# hacky way to make it work on RStudio Workbench
+glove_embed <- read_delim(
+    file = "/rstudio-files/glove6b/glove.6B.100d.txt",
+    delim = " ",
+    quote = "",
+    col_names = c(
+      "token",
+      paste0("d", seq_len(100))
+    ),
+    col_types = paste0(
+      c(
+        "c",
+        rep("d", 100)
+      ),
+      collapse = ""
+    )
+  )
+
+rf_embeds_rec <- recipe(artist ~ ., data = lyrics_train) |>
+  # exclude ID variables
+  update_role(album_name, track_number, track_name, new_role = "id vars") |>
+  step_tokenize(lyrics) |>
+  # calculate aggregate embedding for each song
+  step_word_embeddings(lyrics, embeddings = glove_embed, aggregation = "mean") |>
+  step_downsample(artist)
+rf_embeds_rec
+```
+
+## Tune the model
+
+**Demonstration:**
+
+-   Define the penalized regression model specification, including tuning placeholders for `mtry` and `min_n`
+-   Create the workflow object
+-   Tune the model using the cross-validation folds and an automatically generated tuning grid
+-   Evaluate the tuning procedure and identify the best performing models based on ROC AUC
+
+```{r}
+#| label: rf-embeds-tune
+#| dependson: split, rf-embeds-rec
+
+# define the model specification
+rf_embeds_spec <- rand_forest(trees = 1000, mtry = tune(), min_n = tune()) |>
+  set_mode("classification") |>
+  # calculate feature importance metrics using the ranger engine
+  set_engine("ranger", importance = "permutation")
+
+# define the workflow
+rf_embeds_wf <- workflow() |>
+  add_recipe(rf_embeds_rec) |>
+  add_model(rf_embeds_spec)
+
+# fit the model to each of the cross-validation folds
+rf_embeds_cv <- rf_embeds_wf |>
+  tune_grid(
+    resamples = lyrics_folds,
+    control = control_grid(save_pred = TRUE, save_workflow = TRUE, verbose = TRUE)
+  )
+```
+
+```{r}
+#| label: rf-embeds-metrics
+#| dependson: rf-embeds-tune
+
+# extract metrics
+rf_embeds_cv_metrics <- collect_metrics(rf_embeds_cv)
+
+# how well did the model perform?
+rf_embeds_cv_metrics
+show_best(rf_embeds_cv, metric = "roc_auc")
+```
+
+*Add response here.*
+
+# Fit the best model
+
+**Your turn:**
+
+-   Select the model + hyperparameter combinations that achieve the highest ROC AUC
+-   Fit that model using the best hyperparameters and the full training set. How well does the model perform on the test set?
+
+```{r}
+#| label: best-model
+#| dependson: rf
+# select the best model's hyperparameters
+best_fit <- fit_best(TODO)
+
+# test set ROC AUC
+bind_cols(
+  lyrics_test,
+  predict(best_fit, new_data = lyrics_test, type = "prob")
+) |>
+  roc_auc(truth = artist, .pred_Beyoncé)
+```
+
+*Add response here.*
+
+## Variable importance
+
+We can examine the results of each model to evaluate which tokens were the most important in generating artist predictions. Here we use **vip** to calculate importance.
+
+```{r}
+#| label: imp
+#| dependson: best-model, glmnet
+
+# extract parsnip model fit
+rf_imp <- rf_cv |>
+  fit_best() |>
+  extract_fit_parsnip() |>
+  vi(method = "model")
+
+# clean up the data frame for visualization
+rf_imp |>
+  # extract 20 most important n-grams
+  slice_max(order_by = Importance, n = 20) |>
+  mutate(Variable = fct_reorder(.f = Variable, .x = Importance)) |>
+  ggplot(mapping = aes(
+    x = Importance,
+    y = Variable
+  )) +
+  geom_col() +
+  labs(
+    y = NULL,
+    title = "Most relevant features for predicting whether\na song is by Beyoncé or Taylor Swift",
+    subtitle = "Random forest model"
+  )
+
+# extract parsnip model fit
+glmnet_imp <- glmnet_tune |>
+  fit_best() |>
+  extract_fit_parsnip() |>
+  vi(method = "model", lambda = select_best(x = glmnet_tune, metric = "roc_auc")$penalty)
+
+# clean up the data frame for visualization
+glmnet_imp |>
+  mutate(
+    Sign = case_when(
+      Sign == "NEG" ~ "More likely from Beyoncé",
+      Sign == "POS" ~ "More likely from Taylor Swift"
+    ),
+    Importance = abs(Importance)
+  ) |>
+  # importance must be greater than 0
+  filter(Importance > 0) |>
+  # keep top 20 features for each artist
+  slice_max(n = 20, order_by = Importance, by = Sign) |>
+  mutate(Variable = fct_reorder(.f = Variable, .x = Importance)) |>
+  ggplot(mapping = aes(
+    x = Importance,
+    y = Variable,
+    fill = Sign
+  )) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_brewer(type = "qual") +
+  facet_wrap(facets = vars(Sign), scales = "free_y") +
+  labs(
+    y = NULL,
+    title = "Most relevant features for predicting whether\na song is by Beyoncé or Taylor Swift",
+    subtitle = "Penalized regression model"
+  )
+```
